@@ -28,12 +28,6 @@ export async function startGameHandler(
       );
     }
 
-    // Store resolved puzzle ID in KV with user context for consistency
-    const userGameKey = `user_game:${userId}:${requestedGameId}`;
-    await c.env.KV.put(userGameKey, puzzleId, {
-      expirationTtl: 60 * 60 * 24 * 7,
-    }); // 7 days
-
     const response = await c.env.DATA_SERVICE.fetch(
       new Request("http://internal/game/start", {
         method: "POST",
@@ -47,6 +41,14 @@ export async function startGameHandler(
     );
 
     const result = (await response.json()) as StartGameResponse;
+
+    if (result.success) {
+      // Store direct gameId to puzzleId mapping for reliable command routing
+      const gameIdMappingKey = `gameId_to_puzzleId:${requestedGameId}`;
+      await c.env.KV.put(gameIdMappingKey, puzzleId, {
+        expirationTtl: 60 * 60 * 24 * 7,
+      }); // 7 days
+    }
 
     return c.json(result);
   } catch (error) {

@@ -13,9 +13,9 @@ export async function commandHandler(
   const { gameId, command } = body;
 
   try {
-    // First try to get the stored puzzle ID for consistency
-    const userGameKey = `user_game:${userId}:${gameId}`;
-    let puzzleId = await c.env.KV.get(userGameKey);
+    // Get direct gameId to puzzleId mapping
+    const gameIdMappingKey = `gameId_to_puzzleId:${gameId}`;
+    let puzzleId = await c.env.KV.get(gameIdMappingKey);
     let error: string | undefined;
 
     // Fallback to resolution if not found

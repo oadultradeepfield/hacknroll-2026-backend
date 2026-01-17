@@ -160,42 +160,9 @@ export class GameSession implements DurableObject {
     await this.loadSession();
 
     if (!this.sessionData || !this.engine) {
-      // Try to recover session by recreating from database
-      const { userId, puzzleId } = body;
-      const puzzle = await this.loadPuzzle(puzzleId);
-
-      if (puzzle) {
-        // Create minimal session state for recovery
-        const gameId = `recovered_${nanoid(16)}`;
-        const initialState = this.createInitialGameState(puzzle);
-
-        this.sessionData = {
-          userId,
-          puzzleId,
-          gameId,
-          gameState: initialState,
-          puzzle,
-        };
-
-        this.engine = new GitEngine(
-          initialState.graph,
-          puzzle.fileTargets as FileTarget[],
-          puzzle.constraints as PuzzleConstraints,
-        );
-
-        await this.saveSession();
-
-        // Return error but with recovery info
-        return this.jsonResponse({
-          success: false,
-          error: "Session recovered - please try your command again",
-          gameState: initialState,
-        } as CommandResponse);
-      }
-
       return this.jsonResponse({
         success: false,
-        error: "No active game session and unable to recover",
+        error: "No active game session",
       } as CommandResponse);
     }
 
