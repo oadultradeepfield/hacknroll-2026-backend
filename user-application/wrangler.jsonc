@@ -10,7 +10,7 @@
   "preview_urls": false,
   "workers_dev": false,
   "vars": {
-    "FRONTEND_URL": "https://gitty.phanuphats.com"
+    "FRONTEND_URL": "https://git1y.netlify.app"
   },
   "routes": [
     {

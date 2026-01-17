@@ -7,7 +7,7 @@ declare namespace Cloudflare {
 	}
 	interface Env {
 		KV: KVNamespace;
-		FRONTEND_URL: "https://gitty.phanuphats.com";
+		FRONTEND_URL: "https://git1y.netlify.app/";
 		DB: D1Database;
 		DATA_SERVICE: Fetcher /* hacknroll-2026-data-service */;
 	}
