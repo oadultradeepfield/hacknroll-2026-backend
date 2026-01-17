@@ -10,7 +10,6 @@ import { MAX_UNDO_STACK_SIZE, STALE_SESSION_HOURS } from "@repo/shared";
 import { nanoid } from "nanoid";
 import { loadPuzzle } from "./data-loader";
 import { calculateRewards } from "./scoring";
-// Local imports
 import type { SessionData } from "./types";
 import {
   createEngine,
@@ -18,8 +17,6 @@ import {
   createSnapshot,
   json,
 } from "./utils";
-
-// ─── Durable Object ──────────────────────────────────────────────────────────
 
 export class GameSession implements DurableObject {
   private session: SessionData | null = null;

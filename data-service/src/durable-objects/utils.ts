@@ -7,15 +7,11 @@ import type {
   PuzzleConstraints,
 } from "@repo/shared";
 
-// ─── HTTP Response Utilities ─────────────────────────────────────────────────
-
 export const json = (data: unknown, status = 200): Response =>
   new Response(JSON.stringify(data), {
     status,
     headers: { "Content-Type": "application/json" },
   });
-
-// ─── GameState Utilities ─────────────────────────────────────────────────────
 
 export const createSnapshot = (gs: GameState): GameStateSnapshot => ({
   graph: JSON.parse(JSON.stringify(gs.graph)),
@@ -32,8 +28,6 @@ export const createInitialGameState = (): GameState => ({
   startedAt: Date.now(),
   lastActivityAt: Date.now(),
 });
-
-// ─── Engine Utilities ────────────────────────────────────────────────────────
 
 export const createEngine = (
   puzzle: Puzzle,

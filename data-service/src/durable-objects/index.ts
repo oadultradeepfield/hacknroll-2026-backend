@@ -1,5 +1,3 @@
-// ─── Barrel Exports ──────────────────────────────────────────────────────────
-
 export { loadPuzzle } from "./data-loader";
 export { GameSession } from "./game-session";
 export { calculateRewards } from "./scoring";

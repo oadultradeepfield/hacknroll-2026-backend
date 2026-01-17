@@ -1,8 +1,6 @@
 import type { GameRewards, GameState, Puzzle } from "@repo/shared";
 import { SCORING } from "@repo/shared";
 
-// ─── Scoring Logic ───────────────────────────────────────────────────────────
-
 export function calculateRewards(
   puzzle: Puzzle,
   gameState: GameState,

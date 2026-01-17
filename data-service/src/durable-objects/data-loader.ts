@@ -2,8 +2,6 @@ import { getPuzzleById } from "@repo/database";
 import type { FileTarget, Puzzle, PuzzleConstraints } from "@repo/shared";
 import { DAILY_PUZZLE_KEY_PREFIX } from "@repo/shared";
 
-// ─── Data Loading ────────────────────────────────────────────────────────────
-
 export async function loadPuzzle(
   kv: KVNamespace,
   puzzleId: string,
