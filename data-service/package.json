@@ -1,0 +1,20 @@
+{
+  "name": "data-service",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+  },
+  "dependencies": {
+    "@cloudflare/workers-types": "^4.20260117.0",
+    "@repo/database": "workspace:*",
+    "@repo/git-engine": "workspace:*",
+    "@repo/shared": "workspace:*",
+    "hono": "^4.11.4",
+    "nanoid": "^5.1.6"
+  },
+  "devDependencies": {
+    "wrangler": "^4.4.0"
+  }
+}
