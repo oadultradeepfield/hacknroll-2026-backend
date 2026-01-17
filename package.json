@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "lint:fix": "biome check --write .",
-    "package:build": "pnpm run --filter ./packages/database build && pnpm run --filter ./packages/shared build && pnpm run --filter ./packages/git-engine build",
+    "package:build": "pnpm run --filter ./packages/shared build && pnpm run --filter ./packages/database build && pnpm run --filter ./packages/git-engine build",
     "db:generate": "pnpm run --filter ./packages/database generate",
     "db:pull": "pnpm run --filter ./packages/database pull",
     "db:migrate": "pnpm run --filter ./packages/database migrate",
