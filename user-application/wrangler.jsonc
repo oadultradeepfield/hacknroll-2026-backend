@@ -9,6 +9,9 @@
   },
   "preview_urls": false,
   "workers_dev": false,
+  "vars": {
+    "FRONTEND_URL": "https://gitty.phanuphats.com"
+  },
   "routes": [
     {
       "pattern": "gitty-api.phanuphats.com",

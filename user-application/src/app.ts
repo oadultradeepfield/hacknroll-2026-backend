@@ -6,6 +6,7 @@ import { gameRoutes } from "./routes/game";
 import { leaderboardRoutes } from "./routes/leaderboard";
 import { statsRoutes } from "./routes/stats";
 import { userRoutes } from "./routes/user";
+import { env } from "cloudflare:workers";
 
 export const app = new Hono<{
   Bindings: Cloudflare.Env;
@@ -16,7 +17,7 @@ app.use("*", logger());
 app.use(
   "*",
   cors({
-    origin: "*",
+    origin: ["http://localhost:5173", env.FRONTEND_URL],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
   }),
