@@ -9,8 +9,8 @@
     "db:generate": "pnpm run --filter ./packages/database generate",
     "db:pull": "pnpm run --filter ./packages/database pull",
     "db:migrate": "pnpm run --filter ./packages/database migrate",
-    "deploy:user-app": "pnpm run --filter ./user-application deploy",
-    "deploy:data-service": "pnpm run --filter ./data-service deploy"
+    "deploy:user-app": "pnpm run build && pnpm run --filter ./user-application deploy",
+    "deploy:data-service": "pnpm run build && pnpm run --filter ./data-service deploy"
   },
   "keywords": [],
   "author": "Phanuphat Srisukhawasu",

@@ -5,7 +5,7 @@
   "compatibility_date": "2026-01-17",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
-    "enabled": true,
+    "enabled": true
   },
   "preview_urls": false,
   "workers_dev": false,
@@ -13,30 +13,30 @@
     {
       "binding": "DB",
       "database_name": "hacknroll-2026-db",
-      "database_id": "e933316e-3607-4114-a028-67193389f52f",
-    },
+      "database_id": "e933316e-3607-4114-a028-67193389f52f"
+    }
   ],
   "kv_namespaces": [
     {
       "binding": "KV",
-      "id": "592f6a36c69843a48c7ea07384081748",
-    },
+      "id": "592f6a36c69843a48c7ea07384081748"
+    }
   ],
   "durable_objects": {
     "bindings": [
       {
         "name": "GAME_SESSIONS",
-        "class_name": "GameSession",
-      },
-    ],
+        "class_name": "GameSession"
+      }
+    ]
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_classes": ["GameSession"],
-    },
+      "new_classes": ["GameSession"]
+    }
   ],
   "triggers": {
-    "crons": ["0 18 * * *", "0 0 * * *"],
-  },
+    "crons": ["0 18 * * *", "0 0 * * *"]
+  }
 }
