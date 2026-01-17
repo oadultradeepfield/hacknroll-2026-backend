@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
@@ -6,7 +7,6 @@ import { gameRoutes } from "./routes/game";
 import { leaderboardRoutes } from "./routes/leaderboard";
 import { statsRoutes } from "./routes/stats";
 import { userRoutes } from "./routes/user";
-import { env } from "cloudflare:workers";
 
 export const app = new Hono<{
   Bindings: Cloudflare.Env;
