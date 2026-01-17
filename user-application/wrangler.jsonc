@@ -11,7 +11,7 @@
   "workers_dev": false,
   "routes": [
     {
-      "pattern": "hacknroll2026.phanuphats.com",
+      "pattern": "gitty-api.phanuphats.com",
       "custom_domain": true
     }
   ],

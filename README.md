@@ -1,4 +1,4 @@
-# Hack&Roll 2026 Backend
+# Gitty Backend
 
 **Gittty** is a Wordle-like game designed to help users learn Git commands, built by team **Kopibara C Peng** for Hack&Roll 2026. This repository hosts the backend infrastructure, managed as a monorepo using PNPM workspaces.
 
