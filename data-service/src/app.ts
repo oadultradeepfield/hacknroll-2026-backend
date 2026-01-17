@@ -30,7 +30,7 @@ app.post("/game/start", async (c) => {
 
 app.post("/game/command", async (c) => {
   const body = await c.req.json();
-  const { userId, puzzleId, requestedGameId } = body;
+  const { userId, puzzleId, command } = body;
 
   const sessionId = generateSessionKey(userId, puzzleId);
   const doId = c.env.GAME_SESSIONS.idFromName(sessionId);
@@ -43,7 +43,7 @@ app.post("/game/command", async (c) => {
       body: JSON.stringify({
         userId,
         puzzleId,
-        requestedGameId,
+        command,
       }),
     }),
   );
