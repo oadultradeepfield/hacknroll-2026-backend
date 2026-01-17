@@ -48,7 +48,14 @@ export async function generatePuzzleForDate(
   await env.KV.put(
     `${DAILY_PUZZLE_KEY_PREFIX}${dateString}`,
     JSON.stringify(puzzle),
-    { expirationTtl: 60 * 60 * 48 },
+    { expirationTtl: 60 * 60 * 24 * 7 }, // 7 days instead of 48 hours
+  );
+
+  // Store backup with longer TTL
+  await env.KV.put(
+    `puzzle_backup:${puzzleId}`,
+    JSON.stringify(puzzle),
+    { expirationTtl: 60 * 60 * 24 * 30 }, // 30 days backup
   );
 
   console.log(`Seeded puzzle ${puzzleId} for ${dateString}`);

@@ -13,7 +13,17 @@ export async function commandHandler(
   const { gameId, command } = body;
 
   try {
-    const { puzzleId, error } = await resolvePuzzleId(gameId, c.env.KV);
+    // First try to get the stored puzzle ID for consistency
+    const userGameKey = `user_game:${userId}:${gameId}`;
+    let puzzleId = await c.env.KV.get(userGameKey);
+    let error: string | undefined;
+
+    // Fallback to resolution if not found
+    if (!puzzleId) {
+      const resolved = await resolvePuzzleId(gameId, c.env.KV);
+      puzzleId = resolved.puzzleId;
+      error = resolved.error;
+    }
 
     if (!puzzleId || error) {
       return c.json<CommandResponse>(

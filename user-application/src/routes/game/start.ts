@@ -28,6 +28,12 @@ export async function startGameHandler(
       );
     }
 
+    // Store resolved puzzle ID in KV with user context for consistency
+    const userGameKey = `user_game:${userId}:${requestedGameId}`;
+    await c.env.KV.put(userGameKey, puzzleId, {
+      expirationTtl: 60 * 60 * 24 * 7,
+    }); // 7 days
+
     const response = await c.env.DATA_SERVICE.fetch(
       new Request("http://internal/game/start", {
         method: "POST",

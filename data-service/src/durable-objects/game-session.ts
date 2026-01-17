@@ -75,10 +75,10 @@ export class GameSession implements DurableObject {
     const body = (await request.json()) as {
       userId: string;
       puzzleId: string;
-      existingGameId?: string;
+      requestedGameId?: string;
     };
 
-    const { userId, puzzleId, existingGameId } = body;
+    const { userId, puzzleId, requestedGameId } = body;
 
     await this.loadSession();
 
@@ -105,10 +105,10 @@ export class GameSession implements DurableObject {
       } as StartGameResponse);
     }
 
-    const gameId = existingGameId || `game_${nanoid(16)}`;
+    const gameId = requestedGameId || `game_${nanoid(16)}`;
     const initialState = this.createInitialGameState(puzzle);
 
-    if (!existingGameId) {
+    if (!requestedGameId) {
       await createGame({
         id: gameId,
         userId,
@@ -160,9 +160,42 @@ export class GameSession implements DurableObject {
     await this.loadSession();
 
     if (!this.sessionData || !this.engine) {
+      // Try to recover session by recreating from database
+      const { userId, puzzleId } = body;
+      const puzzle = await this.loadPuzzle(puzzleId);
+
+      if (puzzle) {
+        // Create minimal session state for recovery
+        const gameId = `recovered_${nanoid(16)}`;
+        const initialState = this.createInitialGameState(puzzle);
+
+        this.sessionData = {
+          userId,
+          puzzleId,
+          gameId,
+          gameState: initialState,
+          puzzle,
+        };
+
+        this.engine = new GitEngine(
+          initialState.graph,
+          puzzle.fileTargets as FileTarget[],
+          puzzle.constraints as PuzzleConstraints,
+        );
+
+        await this.saveSession();
+
+        // Return error but with recovery info
+        return this.jsonResponse({
+          success: false,
+          error: "Session recovered - please try your command again",
+          gameState: initialState,
+        } as CommandResponse);
+      }
+
       return this.jsonResponse({
         success: false,
-        error: "No active game session",
+        error: "No active game session and unable to recover",
       } as CommandResponse);
     }
 
@@ -330,6 +363,13 @@ export class GameSession implements DurableObject {
 
     if (cached && (cached as Puzzle).id === puzzleId) {
       return cached as Puzzle;
+    }
+
+    // Try backup puzzle storage
+    const backupKey = `puzzle_backup:${puzzleId}`;
+    const backupCached = await this.env.KV.get(backupKey, "json");
+    if (backupCached) {
+      return backupCached as Puzzle;
     }
 
     const puzzle = await getPuzzleById(puzzleId);

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
+import { getArchivePuzzlesHandler } from "./archive";
 import { commandHandler } from "./command";
 import { startGameHandler } from "./start";
-import { getArchivePuzzlesHandler } from "./archive";
 
 export const gameRoutes = new Hono<{
   Bindings: Cloudflare.Env;
