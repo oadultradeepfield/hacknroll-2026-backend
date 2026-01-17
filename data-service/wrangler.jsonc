@@ -13,13 +13,15 @@
     {
       "binding": "DB",
       "database_name": "hacknroll-2026-db",
-      "database_id": "e933316e-3607-4114-a028-67193389f52f"
+      "database_id": "e933316e-3607-4114-a028-67193389f52f",
+      "remote": true
     }
   ],
   "kv_namespaces": [
     {
       "binding": "KV",
-      "id": "592f6a36c69843a48c7ea07384081748"
+      "id": "592f6a36c69843a48c7ea07384081748",
+      "remote": true
     }
   ],
   "durable_objects": {
