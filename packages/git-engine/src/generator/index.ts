@@ -1,18 +1,5 @@
-import type { FileTarget, PuzzleConstraints } from "@repo/shared";
-import { GitEngine } from "../engine";
-import { solvePuzzle } from "../solver";
 import type { GeneratedPuzzle, PuzzleGeneratorConfig } from "../types";
-import {
-  getConstraintsForDifficulty,
-  getMaxDepthForDifficulty,
-} from "./constraints";
-import { generateFileTargets } from "./file-targets";
-import { SeededRandom } from "./seeded-random";
-import {
-  hasRequiredCommandTypes,
-  isValidParScore,
-  validatePuzzle,
-} from "./validation";
+import { ConstructiveGenerator } from "./constructive";
 
 export function generateDailyPuzzle(date: string): GeneratedPuzzle | null {
   const dayOfWeek = new Date(date).getDay();
@@ -63,78 +50,14 @@ function buildArchivePuzzleConfig(
 }
 
 export class PuzzleGenerator {
-  private random: SeededRandom;
   private config: PuzzleGeneratorConfig;
 
   constructor(config: PuzzleGeneratorConfig) {
     this.config = config;
-    this.random = new SeededRandom(config.seed);
   }
 
   generate(): GeneratedPuzzle | null {
-    const maxAttempts = 100;
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const puzzle = this.tryGenerate();
-      if (puzzle && this.isValidPuzzle(puzzle)) {
-        return puzzle;
-      }
-    }
-
-    return null;
-  }
-
-  private tryGenerate(): GeneratedPuzzle | null {
-    const numFiles = this.random.nextInt(
-      this.config.minFiles,
-      this.config.maxFiles,
-    );
-
-    const constraints = this.getConstraints();
-
-    const fileTargets = this.generateFileTargets(numFiles, constraints);
-
-    const initialGraph = GitEngine.createInitialGraph();
-    const result = solvePuzzle(initialGraph, fileTargets, constraints);
-
-    if (!result.solved || !result.solution) {
-      return null;
-    }
-
-    // biome-ignore lint/style/noNonNullAssertion: result.solved check guarantees totalCommands is defined
-    const parScore = result.totalCommands!;
-
-    if (!isValidParScore(parScore, this.config.minPar, this.config.maxPar)) {
-      return null;
-    }
-
-    const puzzle: GeneratedPuzzle = {
-      fileTargets,
-      constraints,
-      solution: result.solution,
-      parScore,
-    };
-
-    if (!hasRequiredCommandTypes(puzzle, this.config.requiredCommandTypes)) {
-      return null;
-    }
-
-    return puzzle;
-  }
-
-  private getConstraints(): PuzzleConstraints {
-    return getConstraintsForDifficulty(this.config.difficultyLevel);
-  }
-
-  private generateFileTargets(
-    numFiles: number,
-    constraints: PuzzleConstraints,
-  ): FileTarget[] {
-    const maxDepth = getMaxDepthForDifficulty(this.config.difficultyLevel);
-    return generateFileTargets(numFiles, constraints, maxDepth, this.random);
-  }
-
-  private isValidPuzzle(puzzle: GeneratedPuzzle): boolean {
-    return validatePuzzle(puzzle, this.config.minFiles);
+    const generator = new ConstructiveGenerator(this.config);
+    return generator.generate();
   }
 }

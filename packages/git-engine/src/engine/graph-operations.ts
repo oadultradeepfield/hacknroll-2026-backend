@@ -1,7 +1,7 @@
 import type { Commit, GitGraph } from "@repo/shared";
 
 export function cloneGraph(graph: GitGraph): GitGraph {
-  return JSON.parse(JSON.stringify(graph));
+  return structuredClone(graph);
 }
 
 export function getCurrentCommitId(graph: GitGraph): string {

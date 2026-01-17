@@ -10,35 +10,114 @@ import { generatePossibleCommands } from "./command-generator";
 import { cloneGraph, getStateKey } from "./state-management";
 import { isWinState } from "./win-condition";
 
+class PriorityQueue<T> {
+  private heap: { item: T; priority: number }[] = [];
+
+  push(item: T, priority: number) {
+    this.heap.push({ item, priority });
+    this.bubbleUp(this.heap.length - 1);
+  }
+
+  pop(): T | undefined {
+    if (this.heap.length === 0) return undefined;
+    const top = this.heap[0];
+    const bottom = this.heap.pop();
+    if (bottom !== undefined && this.heap.length > 0) {
+      this.heap[0] = bottom;
+      this.sinkDown(0);
+    }
+    return top?.item;
+  }
+
+  get length(): number {
+    return this.heap.length;
+  }
+
+  private bubbleUp(index: number) {
+    while (index > 0) {
+      const parentIndex = Math.floor((index - 1) / 2);
+      if (this.heap[index].priority >= this.heap[parentIndex].priority) break;
+      [this.heap[index], this.heap[parentIndex]] = [
+        this.heap[parentIndex],
+        this.heap[index],
+      ];
+      index = parentIndex;
+    }
+  }
+
+  private sinkDown(index: number) {
+    const length = this.heap.length;
+    while (true) {
+      let swap = -1;
+      const leftChild = 2 * index + 1;
+      const rightChild = 2 * index + 2;
+
+      if (leftChild < length) {
+        if (this.heap[leftChild].priority < this.heap[index].priority) {
+          swap = leftChild;
+        }
+      }
+
+      if (rightChild < length) {
+        if (
+          (swap === -1 &&
+            this.heap[rightChild].priority < this.heap[index].priority) ||
+          (swap !== -1 &&
+            this.heap[rightChild].priority < this.heap[swap].priority)
+        ) {
+          swap = rightChild;
+        }
+      }
+
+      if (swap === -1) break;
+      [this.heap[index], this.heap[swap]] = [this.heap[swap], this.heap[index]];
+      index = swap;
+    }
+  }
+}
+
 export function searchForSolution(
   initialGraph: GitGraph,
   fileTargets: FileTarget[],
   constraints: PuzzleConstraints,
   maxDepth: number,
 ): SolverResult {
-  const visited = new Set<string>();
-  const queue: SolverState[] = [
-    {
-      graph: cloneGraph(initialGraph),
-      collectedFiles: new Set(),
-      commands: [],
-    },
-  ];
+  const bestCosts = new Map<string, number>();
+
+  const queue = new PriorityQueue<SolverState>();
+
+  const initialState: SolverState = {
+    graph: cloneGraph(initialGraph),
+    collectedFiles: new Set(),
+    commands: [],
+  };
+
+  queue.push(initialState, 0);
 
   let statesExplored = 0;
+  const MAX_STATES = 20000;
 
   while (queue.length > 0) {
-    // biome-ignore lint/style/noNonNullAssertion: queue is guaranteed to have elements due to while condition check
-    const state = queue.shift()!;
+    const state = queue.pop();
+    if (!state) break;
     statesExplored++;
+
+    if (statesExplored > MAX_STATES) {
+      break;
+    }
 
     if (state.commands.length > maxDepth) {
       continue;
     }
 
     const stateKey = getStateKey(state);
-    if (visited.has(stateKey)) continue;
-    visited.add(stateKey);
+    const currentCost = state.commands.length;
+
+    const existingCost = bestCosts.get(stateKey);
+    if (existingCost !== undefined && existingCost <= currentCost) {
+      continue;
+    }
+    bestCosts.set(stateKey, currentCost);
 
     const engine = createEngineFromState(state, fileTargets, constraints);
 
@@ -51,6 +130,10 @@ export function searchForSolution(
       };
     }
 
+    if (state.commands.length >= maxDepth) {
+      continue;
+    }
+
     const nextStates = exploreNextStates(
       state,
       engine,
@@ -58,13 +141,59 @@ export function searchForSolution(
       constraints,
     );
 
-    queue.push(...nextStates);
+    for (const nextState of nextStates) {
+      const g = nextState.commands.length;
+      const h = calculateHeuristic(nextState, fileTargets);
+      const f = g + h;
+
+      const nextKey = getStateKey(nextState);
+      const nextCost = bestCosts.get(nextKey);
+      if (nextCost === undefined || nextCost > g) {
+        queue.push(nextState, f);
+      }
+    }
   }
 
   return {
     solved: false,
     statesExplored,
   };
+}
+
+function calculateHeuristic(
+  state: SolverState,
+  fileTargets: FileTarget[],
+): number {
+  // A* Heuristic: h(n) = estimated cost from n to goal
+  // Must be admissible (never overestimate)
+
+  // 1. Uncollected files
+  // We need at least 1 command (visit/commit) to collect each remaining file.
+  // This is a lower bound.
+  const uncollectedCount = fileTargets.length - state.collectedFiles.size;
+
+  // 2. Head position
+  // If HEAD is not on 'main' and attached, we need at least 1 command to get there (checkout main or merge to main).
+  let notOnMainPenalty = 0;
+  const { head } = state.graph;
+  if (head.type === "detached" || head.ref !== "main") {
+    notOnMainPenalty = 1;
+  }
+
+  // 3. Required operations
+  // If we haven't done a merge or rebase yet, we need at least 1 command to do so.
+  const hasMergeOrRebase = state.commands.some(
+    (c) => c.type === "merge" || c.type === "rebase",
+  );
+  const requirementPenalty = hasMergeOrRebase ? 0 : 1;
+
+  // Combining penalties:
+  // If we have files to collect, we are definitely not done.
+  // If we have collected all files, we still need to be on main.
+  // We can sum these up as a loose lower bound.
+  // Note: If uncollected > 0, we might be on main or not, but we have to leave main (presumably) or move around.
+  // For safety, simpler heuristic is often better.
+  return uncollectedCount + notOnMainPenalty + requirementPenalty;
 }
 
 function createEngineFromState(
@@ -128,7 +257,7 @@ function tryExecuteCommand(
   }
 
   return {
-    // biome-ignore lint/style/noNonNullAssertion: result.newGraph is guaranteed to exist because result.success is true
+    // biome-ignore lint/style/noNonNullAssertion: result.newGraph guaranteed on success
     graph: result.newGraph!,
     collectedFiles: new Set(result.collectedFiles),
     commands: [...currentState.commands, command],

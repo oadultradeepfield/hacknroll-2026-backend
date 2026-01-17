@@ -1,5 +1,7 @@
 import type { SolverState } from "../types";
 
+export { cloneGraph } from "../engine/graph-operations";
+
 export function getStateKey(state: SolverState): string {
   const graph = state.graph;
 
@@ -16,8 +18,4 @@ export function getStateKey(state: SolverState): string {
   const files = Array.from(state.collectedFiles).sort().join(",");
 
   return `${branchTips}|${head}|${files}`;
-}
-
-export function cloneGraph<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj));
 }
