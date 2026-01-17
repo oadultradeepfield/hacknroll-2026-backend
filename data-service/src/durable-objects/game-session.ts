@@ -1,112 +1,85 @@
 import {
   completeGame,
   createGame,
-  getPuzzleById,
   initDatabase,
   updateGameCommands,
 } from "@repo/database";
-import { GitEngine } from "@repo/git-engine";
-import type {
-  Command,
-  CommandResponse,
-  FileTarget,
-  GameRewards,
-  GameState,
-  GameStateSnapshot,
-  Puzzle,
-  PuzzleConstraints,
-  StartGameResponse,
-} from "@repo/shared";
-import {
-  DAILY_PUZZLE_KEY_PREFIX,
-  MAX_UNDO_STACK_SIZE,
-  SCORING,
-  STALE_SESSION_HOURS,
-} from "@repo/shared";
+import type { GitEngine } from "@repo/git-engine";
+import type { Command } from "@repo/shared";
+import { MAX_UNDO_STACK_SIZE, STALE_SESSION_HOURS } from "@repo/shared";
 import { nanoid } from "nanoid";
+import { loadPuzzle } from "./data-loader";
+import { calculateRewards } from "./scoring";
+// Local imports
+import type { SessionData } from "./types";
+import {
+  createEngine,
+  createInitialGameState,
+  createSnapshot,
+  json,
+} from "./utils";
 
-interface SessionData {
-  userId: string;
-  puzzleId: string;
-  gameId: string;
-  gameState: GameState;
-  puzzle: Puzzle;
-}
+// ─── Durable Object ──────────────────────────────────────────────────────────
 
 export class GameSession implements DurableObject {
-  private state: DurableObjectState;
-  private env: Cloudflare.Env;
-  private sessionData: SessionData | null = null;
+  private session: SessionData | null = null;
   private engine: GitEngine | null = null;
 
-  constructor(state: DurableObjectState, env: Cloudflare.Env) {
-    this.state = state;
-    this.env = env;
+  constructor(
+    private ctx: DurableObjectState,
+    private env: Cloudflare.Env,
+  ) {
     initDatabase(env.DB);
+    ctx.blockConcurrencyWhile(async () => {
+      this.session = (await ctx.storage.get<SessionData>("session")) ?? null;
+      if (this.session)
+        this.engine = createEngine(
+          this.session.puzzle,
+          this.session.gameState.graph,
+        );
+    });
   }
 
   async fetch(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-
+    const path = new URL(request.url).pathname;
     try {
-      if (url.pathname === "/start") {
-        return await this.handleStart(request);
-      } else if (url.pathname === "/command") {
-        return await this.handleCommand(request);
-      }
-
+      if (path === "/start") return this.handleStart(request);
+      if (path === "/command") return this.handleCommand(request);
       return new Response("Not found", { status: 404 });
-    } catch (error) {
-      console.error("GameSession error:", error);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: "Internal error",
-        }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+    } catch (e) {
+      console.error("GameSession error:", e);
+      return json({ success: false, error: "Internal error" }, 500);
     }
   }
 
   private async handleStart(request: Request): Promise<Response> {
-    const body = (await request.json()) as {
+    const { userId, puzzleId, requestedGameId } = await request.json<{
       userId: string;
       puzzleId: string;
       requestedGameId?: string;
-    };
+    }>();
 
-    const { userId, puzzleId, requestedGameId } = body;
-
-    await this.loadSession();
-
-    if (this.sessionData) {
-      const response: StartGameResponse = {
+    if (this.session) {
+      const isCompleted = this.session.gameState.status === "completed";
+      return json({
         success: true,
-        gameState: this.sessionData.gameState,
-        puzzle: this.sessionData.puzzle,
-        isCompleted: this.sessionData.gameState.status === "completed",
-      };
-
-      if (response.isCompleted) {
-        response.rewards = this.calculateRewards();
-      }
-
-      return this.jsonResponse(response);
+        gameState: this.session.gameState,
+        puzzle: this.session.puzzle,
+        isCompleted,
+        ...(isCompleted && {
+          rewards: calculateRewards(
+            this.session.puzzle,
+            this.session.gameState,
+          ),
+        }),
+      });
     }
 
-    const puzzle = await this.loadPuzzle(puzzleId);
-    if (!puzzle) {
-      return this.jsonResponse({
-        success: false,
-        error: "Puzzle not found",
-      } as StartGameResponse);
-    }
+    const puzzle = await loadPuzzle(this.env.KV, puzzleId);
+    if (!puzzle) return json({ success: false, error: "Puzzle not found" });
 
     const gameId = requestedGameId || `game_${nanoid(16)}`;
-    const initialState = this.createInitialGameState(puzzle);
+    const gameState = createInitialGameState();
 
     if (!requestedGameId) {
       await createGame({
@@ -121,314 +94,94 @@ export class GameSession implements DurableObject {
       });
     }
 
-    this.sessionData = {
-      userId,
-      puzzleId,
-      gameId,
-      gameState: initialState,
-      puzzle,
-    };
+    this.session = { userId, puzzleId, gameId, gameState, puzzle };
+    this.engine = createEngine(puzzle, gameState.graph);
+    await this.save();
+    await this.ctx.storage.setAlarm(Date.now() + STALE_SESSION_HOURS * 3600000);
 
-    this.engine = new GitEngine(
-      initialState.graph,
-      puzzle.fileTargets as FileTarget[],
-      puzzle.constraints as PuzzleConstraints,
-    );
-
-    await this.saveSession();
-
-    await this.state.storage.setAlarm(
-      Date.now() + STALE_SESSION_HOURS * 60 * 60 * 1000,
-    );
-
-    return this.jsonResponse({
-      success: true,
-      gameState: initialState,
-      puzzle,
-    } as StartGameResponse);
+    return json({ success: true, gameState, puzzle });
   }
 
   private async handleCommand(request: Request): Promise<Response> {
-    const body = (await request.json()) as {
-      userId: string;
-      puzzleId: string;
-      command: Command;
-    };
+    const { command } = await request.json<{ command: Command }>();
 
-    const { command } = body;
-
-    await this.loadSession();
-
-    if (!this.sessionData || !this.engine) {
-      return this.jsonResponse({
-        success: false,
-        error: "No active game session",
-      } as CommandResponse);
+    if (!this.session || !this.engine) {
+      return json({ success: false, error: "No active game session" });
     }
 
-    if (this.sessionData.gameState.status === "completed") {
-      return this.jsonResponse({
+    const { puzzle, gameState: gs } = this.session;
+
+    if (gs.status === "completed") {
+      return json({
         success: false,
         error: "Game is already completed",
         isCompleted: true,
-        rewards: this.calculateRewards(),
-      } as CommandResponse);
+        rewards: calculateRewards(puzzle, gs),
+      });
     }
 
     if (command.type === "undo") {
-      return await this.handleUndo();
+      if (!gs.undoStack.length)
+        return json({ success: false, error: "Nothing to undo" });
+
+      // biome-ignore lint/style/noNonNullAssertion: undoStack is guaranteed to have at least one element due to the length check above
+      const prev = gs.undoStack.pop()!;
+      Object.assign(gs, {
+        graph: prev.graph,
+        collectedFiles: prev.collectedFiles,
+        commandHistory: prev.commandHistory,
+        lastActivityAt: Date.now(),
+      });
+      this.engine = createEngine(puzzle, gs.graph);
+      await this.save();
+      return json({ success: true, gameState: gs });
     }
 
-    const snapshot = this.createSnapshot();
+    const snapshot = createSnapshot(gs);
     const result = this.engine.executeCommand(command);
 
-    if (!result.success) {
-      return this.jsonResponse({
-        success: false,
-        error: result.error,
-      } as CommandResponse);
-    }
+    if (!result.success) return json({ success: false, error: result.error });
 
-    if (result.newGraph) {
-      this.sessionData.gameState.graph = result.newGraph;
-    }
-    if (result.collectedFiles) {
-      this.sessionData.gameState.collectedFiles = result.collectedFiles;
-    }
-    this.sessionData.gameState.commandHistory.push(command);
-    this.sessionData.gameState.lastActivityAt = Date.now();
-
-    if (this.sessionData.gameState.undoStack.length >= MAX_UNDO_STACK_SIZE) {
-      this.sessionData.gameState.undoStack.shift();
-    }
-    this.sessionData.gameState.undoStack.push(snapshot);
+    if (result.newGraph) gs.graph = result.newGraph;
+    if (result.collectedFiles) gs.collectedFiles = result.collectedFiles;
+    gs.commandHistory.push(command);
+    gs.lastActivityAt = Date.now();
+    if (gs.undoStack.length >= MAX_UNDO_STACK_SIZE) gs.undoStack.shift();
+    gs.undoStack.push(snapshot);
 
     if (result.isGameComplete) {
-      this.sessionData.gameState.status = "completed";
-
-      const rewards = this.calculateRewards();
-
+      gs.status = "completed";
+      const rewards = calculateRewards(puzzle, gs);
       await completeGame(
-        this.sessionData.gameId,
-        this.sessionData.userId,
+        this.session.gameId,
+        this.session.userId,
         rewards.score,
         rewards.commandsUsed,
       );
-
-      await this.saveSession();
-
-      return this.jsonResponse({
-        success: true,
-        gameState: this.sessionData.gameState,
-        isCompleted: true,
-        rewards,
-      } as CommandResponse);
+      await this.save();
+      return json({ success: true, gameState: gs, isCompleted: true, rewards });
     }
 
-    await this.saveSession();
-
-    await updateGameCommands(
-      this.sessionData.gameId,
-      this.sessionData.gameState.commandHistory.length,
-    );
-
-    return this.jsonResponse({
-      success: true,
-      gameState: this.sessionData.gameState,
-    } as CommandResponse);
-  }
-
-  private async handleUndo(): Promise<Response> {
-    if (!this.sessionData) {
-      return this.jsonResponse({
-        success: false,
-        error: "No active session",
-      } as CommandResponse);
-    }
-
-    if (this.sessionData.gameState.undoStack.length === 0) {
-      return this.jsonResponse({
-        success: false,
-        error: "Nothing to undo",
-      } as CommandResponse);
-    }
-
-    const previousState = this.sessionData.gameState.undoStack.pop();
-
-    if (!previousState) {
-      return this.jsonResponse({
-        success: false,
-        error: "Failed to restore previous state",
-      } as CommandResponse);
-    }
-
-    this.sessionData.gameState.graph = previousState.graph;
-    this.sessionData.gameState.collectedFiles = previousState.collectedFiles;
-    this.sessionData.gameState.commandHistory = previousState.commandHistory;
-    this.sessionData.gameState.lastActivityAt = Date.now();
-
-    this.engine = new GitEngine(
-      previousState.graph,
-      this.sessionData.puzzle.fileTargets as FileTarget[],
-      this.sessionData.puzzle.constraints as PuzzleConstraints,
-    );
-
-    await this.saveSession();
-
-    return this.jsonResponse({
-      success: true,
-      gameState: this.sessionData.gameState,
-    } as CommandResponse);
+    await this.save();
+    await updateGameCommands(this.session.gameId, gs.commandHistory.length);
+    return json({ success: true, gameState: gs });
   }
 
   async alarm(): Promise<void> {
-    await this.loadSession();
-
-    if (!this.sessionData) return;
-
-    const now = Date.now();
-    const lastActivity = this.sessionData.gameState.lastActivityAt;
-    const hoursInactive = (now - lastActivity) / (1000 * 60 * 60);
+    if (!this.session) return;
+    const hoursInactive =
+      (Date.now() - this.session.gameState.lastActivityAt) / 3600000;
 
     if (hoursInactive >= STALE_SESSION_HOURS) {
-      if (this.sessionData.gameState.status === "in_progress") {
-        await this.saveSession();
-      }
-
-      await this.state.storage.deleteAll();
+      await this.ctx.storage.deleteAll();
+      this.session = null;
+      this.engine = null;
     } else {
-      await this.state.storage.setAlarm(
-        now + (STALE_SESSION_HOURS - hoursInactive) * 60 * 60 * 1000,
+      await this.ctx.storage.setAlarm(
+        Date.now() + (STALE_SESSION_HOURS - hoursInactive) * 3600000,
       );
     }
   }
 
-  private async loadSession(): Promise<void> {
-    if (this.sessionData) return;
-
-    const stored = await this.state.storage.get<SessionData>("session");
-    if (stored) {
-      this.sessionData = stored;
-      this.engine = new GitEngine(
-        stored.gameState.graph,
-        stored.puzzle.fileTargets as FileTarget[],
-        stored.puzzle.constraints as PuzzleConstraints,
-      );
-    }
-  }
-
-  private async saveSession(): Promise<void> {
-    if (this.sessionData) {
-      await this.state.storage.put("session", this.sessionData);
-    }
-  }
-
-  private async loadPuzzle(puzzleId: string): Promise<Puzzle | null> {
-    const today = new Date().toISOString().split("T")[0];
-    const kvKey = `${DAILY_PUZZLE_KEY_PREFIX}${today}`;
-    const cached = await this.env.KV.get(kvKey, "json");
-
-    if (cached && (cached as Puzzle).id === puzzleId) {
-      return cached as Puzzle;
-    }
-
-    // Try backup puzzle storage
-    const backupKey = `puzzle_backup:${puzzleId}`;
-    const backupCached = await this.env.KV.get(backupKey, "json");
-    if (backupCached) {
-      return backupCached as Puzzle;
-    }
-
-    const puzzle = await getPuzzleById(puzzleId);
-
-    if (!puzzle) return null;
-
-    return {
-      id: puzzle.id,
-      date: puzzle.date,
-      difficultyLevel: puzzle.difficultyLevel,
-      fileTargets: puzzle.fileTargets as FileTarget[],
-      constraints: puzzle.constraints as PuzzleConstraints,
-      solution: puzzle.solution,
-      parScore: puzzle.parScore,
-    };
-  }
-
-  private createInitialGameState(_puzzle: Puzzle): GameState {
-    const initialGraph = GitEngine.createInitialGraph();
-
-    return {
-      graph: initialGraph,
-      collectedFiles: [],
-      commandHistory: [],
-      undoStack: [],
-      status: "in_progress",
-      startedAt: Date.now(),
-      lastActivityAt: Date.now(),
-    };
-  }
-
-  private createSnapshot(): GameStateSnapshot {
-    if (!this.sessionData) {
-      throw new Error("Cannot create snapshot without session data");
-    }
-
-    return {
-      graph: JSON.parse(JSON.stringify(this.sessionData.gameState.graph)),
-      collectedFiles: [...this.sessionData.gameState.collectedFiles],
-      commandHistory: [...this.sessionData.gameState.commandHistory],
-    };
-  }
-
-  private calculateRewards(): GameRewards {
-    if (!this.sessionData) {
-      return {
-        score: 0,
-        parScore: 0,
-        commandsUsed: 0,
-        optimalSolution: { commands: [], totalCommands: 0 },
-        performance: "over_par",
-        bonusPoints: 0,
-      };
-    }
-
-    const { puzzle, gameState } = this.sessionData;
-    const commandsUsed = gameState.commandHistory.length;
-    const parScore = puzzle.parScore;
-
-    let performance: "under_par" | "at_par" | "over_par";
-    let bonusPoints = 0;
-
-    if (commandsUsed < parScore) {
-      performance = "under_par";
-      bonusPoints =
-        (parScore - commandsUsed) * SCORING.UNDER_PAR_BONUS_PER_COMMAND;
-    } else if (commandsUsed === parScore) {
-      performance = "at_par";
-      bonusPoints = SCORING.AT_PAR_BONUS;
-    } else {
-      performance = "over_par";
-      bonusPoints = -Math.min(
-        (commandsUsed - parScore) * SCORING.OVER_PAR_PENALTY_PER_COMMAND,
-        SCORING.BASE_COMPLETION / 2,
-      );
-    }
-
-    const score = Math.max(0, SCORING.BASE_COMPLETION + bonusPoints);
-
-    return {
-      score,
-      parScore,
-      commandsUsed,
-      optimalSolution: puzzle.solution,
-      performance,
-      bonusPoints,
-    };
-  }
-
-  private jsonResponse(data: unknown): Response {
-    return new Response(JSON.stringify(data), {
-      headers: { "Content-Type": "application/json" },
-    });
-  }
+  private save = () => this.ctx.storage.put("session", this.session);
 }
