@@ -12,7 +12,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json --outDir ./dist && tsc-alias",
     "pull": "drizzle-kit pull --config drizzle.config.ts",
-    "generate": "drizzle-kit generate --config drizzle.config.ts"
+    "generate": "drizzle-kit generate --config drizzle.config.ts",
+    "migrate": "drizzle-kit migrate --config drizzle.config.ts"
   },
   "dependencies": {
     "@cloudflare/workers-types": "^4.20260117.0",
