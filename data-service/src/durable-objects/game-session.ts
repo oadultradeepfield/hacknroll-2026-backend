@@ -7,7 +7,6 @@ import {
 import type { GitEngine } from "@repo/git-engine";
 import type { Command } from "@repo/shared";
 import { MAX_UNDO_STACK_SIZE, STALE_SESSION_HOURS } from "@repo/shared";
-import { nanoid } from "nanoid";
 import { loadPuzzle } from "./data-loader";
 import { calculateRewards } from "./scoring";
 import type { SessionData } from "./types";
@@ -53,7 +52,7 @@ export class GameSession implements DurableObject {
     const { userId, puzzleId, requestedGameId } = await request.json<{
       userId: string;
       puzzleId: string;
-      requestedGameId?: string;
+      requestedGameId: string;
     }>();
 
     if (this.session) {
@@ -75,7 +74,7 @@ export class GameSession implements DurableObject {
     const puzzle = await loadPuzzle(this.env.KV, puzzleId);
     if (!puzzle) return json({ success: false, error: "Puzzle not found" });
 
-    const gameId = requestedGameId || `game_${nanoid(16)}`;
+    const gameId = requestedGameId;
     const gameState = createInitialGameState();
 
     if (!requestedGameId) {
