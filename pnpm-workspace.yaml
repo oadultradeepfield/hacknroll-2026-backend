@@ -1,0 +1,4 @@
+packages:
+  - "user-application"
+  - "data-service"
+  - "packages/*"

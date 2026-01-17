@@ -1,0 +1,23 @@
+{
+  "name": "hacknroll-2026",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "lint:fix": "biome check --write .",
+    "package:build": "pnpm run --filter ./packages/database build && pnpm run --filter ./packages/shared build && pnpm run --filter ./packages/git-engine build",
+    "db:generate": "pnpm run --filter ./packages/database generate",
+    "db:pull": "pnpm run --filter ./packages/database pull",
+    "deploy:user-app": "pnpm run --filter ./user-application deploy",
+    "deploy:data-service": "pnpm run --filter ./data-service deploy"
+  },
+  "keywords": [],
+  "author": "Phanuphat Srisukhawasu",
+  "license": "ISC",
+  "packageManager": "pnpm@10.25.0",
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.11",
+    "tsc-alias": "^1.8.16",
+    "typescript": "^5.9.3"
+  }
+}

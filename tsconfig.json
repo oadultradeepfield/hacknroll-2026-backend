@@ -1,0 +1,22 @@
+{
+  "files": ["biome.json"],
+  "references": [
+    { "path": "./data-service" },
+    { "path": "./user-application" },
+    { "path": "./packages/database" },
+    { "path": "./packages/git-engine" },
+    { "path": "./packages/shared" }
+  ],
+  "compilerOptions": {
+    /* Tooling-only */
+    "composite": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+
+    /* Modern defaults */
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true
+  }
+}
