@@ -172,6 +172,44 @@ Requires the `gameId` and a `command` object.
 
 ```
 
+### GET /game/archive
+
+Retrieves the current user's archived puzzle history.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "game_abc123",
+      "puzzleId": "puzzle_456",
+      "title": "Git Basics",
+      "difficulty": "easy",
+      "status": "completed",
+      "score": 100,
+      "parScore": 5,
+      "commandsUsed": 4,
+      "performance": "under_par",
+      "completedAt": "2024-01-15T09:15:00Z"
+    },
+    {
+      "id": "game_def456",
+      "puzzleId": "puzzle_789",
+      "title": "Advanced Rebasing",
+      "difficulty": "hard",
+      "status": "completed",
+      "score": 85,
+      "parScore": 6,
+      "commandsUsed": 8,
+      "performance": "over_par",
+      "completedAt": "2024-01-14T14:30:00Z"
+    }
+  ]
+}
+```
+
 ## Statistics & Leaderboard
 
 ### GET /stats

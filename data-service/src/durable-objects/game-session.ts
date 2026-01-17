@@ -1,5 +1,6 @@
 import {
   completeGame,
+  createGame,
   getPuzzleById,
   initDatabase,
   updateGameCommands,
@@ -106,6 +107,19 @@ export class GameSession implements DurableObject {
 
     const gameId = existingGameId || `game_${nanoid(16)}`;
     const initialState = this.createInitialGameState(puzzle);
+
+    if (!existingGameId) {
+      await createGame({
+        id: gameId,
+        userId,
+        puzzleId,
+        status: "in_progress",
+        commandsUsed: 0,
+        score: null,
+        startedAt: Date.now(),
+        completedAt: null,
+      });
+    }
 
     this.sessionData = {
       userId,

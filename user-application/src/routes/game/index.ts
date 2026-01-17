@@ -1,11 +1,13 @@
 import { Hono } from "hono";
 import { commandHandler } from "./command";
 import { startGameHandler } from "./start";
+import { getArchivePuzzlesHandler } from "./archive";
 
 export const gameRoutes = new Hono<{
   Bindings: Cloudflare.Env;
   Variables: { userId: string };
 }>();
 
+gameRoutes.get("/archive", getArchivePuzzlesHandler);
 gameRoutes.post("/start", startGameHandler);
 gameRoutes.post("/command", commandHandler);
