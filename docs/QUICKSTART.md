@@ -4,12 +4,14 @@ This guide details how to integrate the User Application REST API into a TypeScr
 
 ## Environment Configuration
 
-**Base URLs**
+**Base URL**
 
-- **Production:** `https://your-worker-domain.workers.dev`
-- **Development:** `http://localhost:8787`
+```
+https://gitty-api.phanuphats.com
+```
 
 **Prerequisites**
+
 Ensure you have the shared type definitions installed:
 
 ```typescript
@@ -163,7 +165,3 @@ const { entries, userRank } = await fetch("/leaderboard").then((r) => r.json());
 - **Completion Check:** Check `isCompleted` after every command execution.
 - **Caching:** The leaderboard endpoint is cached server-side for 5 minutes.
 - **Daily ID:** Use `"daily"` as the `gameId` to automatically route users to the current day's challenge.
-
-### Next Steps
-
-Would you like me to create a **Postman Collection** JSON file based on these examples for testing?
