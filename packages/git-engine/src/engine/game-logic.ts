@@ -71,21 +71,39 @@ export function checkFileCollection(
 }
 
 /**
+ * Checks if a file target is reachable from the main branch.
+ * This ensures files from other branches have been merged/rebased into main.
+ */
+function isFileReachableFromMain(graph: GitGraph, target: FileTarget): boolean {
+  const mainBranch = graph.branches.main;
+  if (!mainBranch) {
+    return false;
+  }
+
+  const mainTipId = mainBranch.tipCommitId;
+  return isFileReachable(graph, mainTipId, target);
+}
+
+/**
  * Checks if the win condition is met:
- * 1. All files must be collected
- * 2. HEAD must be attached to main branch
+ * 1. HEAD must be attached to main branch
+ * 2. All file targets must be reachable from main branch
+ *    (files on other branches must be merged/rebased into main)
  */
 export function checkWinCondition(
   graph: GitGraph,
   fileTargets: FileTarget[],
-  collectedFiles: Set<string>,
 ): boolean {
-  if (collectedFiles.size !== fileTargets.length) {
+  // Must be on main branch
+  if (graph.head.type !== "attached" || graph.head.ref !== "main") {
     return false;
   }
 
-  if (graph.head.type !== "attached" || graph.head.ref !== "main") {
-    return false;
+  // All files must be reachable from main (not just collected while on other branches)
+  for (const target of fileTargets) {
+    if (!isFileReachableFromMain(graph, target)) {
+      return false;
+    }
   }
 
   return true;

@@ -139,11 +139,7 @@ export class GitEngine {
     if (result.success) {
       this.commandCounts[command.type]++;
       checkFileCollection(this.graph, this.fileTargets, this.collectedFiles);
-      result.isGameComplete = checkWinCondition(
-        this.graph,
-        this.fileTargets,
-        this.collectedFiles,
-      );
+      result.isGameComplete = checkWinCondition(this.graph, this.fileTargets);
     }
 
     return {
