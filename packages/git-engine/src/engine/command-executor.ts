@@ -13,7 +13,6 @@ import {
   findCommonAncestor,
   getCommitsBetween,
   getCurrentCommitId,
-  isAncestor,
 } from "./graph-operations";
 
 export function executeCommit(
@@ -96,23 +95,21 @@ export function executeMerge(
   const currentBranch = graph.head.ref;
   const currentCommitId = graph.branches[currentBranch].tipCommitId;
   const targetCommitId = graph.branches[command.branch].tipCommitId;
-
-  // Check for fast-forward
-  if (isAncestor(graph, currentCommitId, targetCommitId)) {
-    graph.branches[currentBranch].tipCommitId = targetCommitId;
-    return { success: true };
-  }
-
-  // Create merge commit
-  const mergeCommitId = nanoid(8);
   const currentCommit = graph.commits[currentCommitId];
+  const targetCommit = graph.commits[targetCommitId];
+
+  // Always create a merge commit (like `git merge --no-ff`)
+  const mergeCommitId = nanoid(8);
+
+  // Use the max depth of both parents + 1 for the merge commit
+  const mergeDepth = Math.max(currentCommit.depth, targetCommit.depth) + 1;
 
   const mergeCommit: Commit = {
     id: mergeCommitId,
     message: `Merge ${command.branch} into ${currentBranch}`,
     parents: [currentCommitId, targetCommitId],
     branch: currentBranch,
-    depth: currentCommit.depth + 1,
+    depth: mergeDepth,
     timestamp: Date.now(),
   };
 
