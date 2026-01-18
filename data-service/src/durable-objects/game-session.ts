@@ -1,8 +1,11 @@
 import {
   completeGame,
   createGame,
+  getOrCreateUserStats,
+  incrementStats,
   initDatabase,
   updateGameCommands,
+  updateStreak,
 } from "@repo/database";
 import type { GitEngine } from "@repo/git-engine";
 import type { Command } from "@repo/shared";
@@ -154,6 +157,17 @@ export class GameSession implements DurableObject {
         rewards.score,
         rewards.commandsUsed,
       );
+
+      await getOrCreateUserStats(this.session.userId);
+      const won = rewards.score > 0;
+      await incrementStats(
+        this.session.userId,
+        rewards.commandsUsed,
+        rewards.score,
+        won,
+      );
+      await updateStreak(this.session.userId, true);
+
       await this.save();
       return json({ success: true, gameState: gs, isCompleted: true, rewards });
     }
