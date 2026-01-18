@@ -115,6 +115,20 @@ export class GitEngine {
         break;
       case "rebase":
         result = executeRebase(this.graph, command);
+        // Update file target depths based on rebased commit mappings
+        if (result.success && result.rebasedCommitMappings) {
+          for (const mapping of result.rebasedCommitMappings) {
+            for (const target of this.fileTargets) {
+              if (
+                target.branch === mapping.originalBranch &&
+                target.depth === mapping.originalDepth &&
+                !this.collectedFiles.has(target.fileName)
+              ) {
+                target.depth = mapping.newDepth;
+              }
+            }
+          }
+        }
         break;
       default:
         return { success: false, error: "Unknown command type" };
@@ -127,7 +141,6 @@ export class GitEngine {
         this.graph,
         this.fileTargets,
         this.collectedFiles,
-        this.commandCounts,
       );
     }
 

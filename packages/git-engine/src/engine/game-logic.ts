@@ -28,7 +28,6 @@ export function checkWinCondition(
   graph: GitGraph,
   fileTargets: FileTarget[],
   collectedFiles: Set<string>,
-  commandCounts: Record<string, number>,
 ): boolean {
   if (collectedFiles.size !== fileTargets.length) {
     return false;
@@ -42,5 +41,5 @@ export function checkWinCondition(
     (commit) => commit.parents.length > 1,
   );
 
-  return hasMultipleParentCommit || commandCounts.rebase > 0;
+  return hasMultipleParentCommit;
 }

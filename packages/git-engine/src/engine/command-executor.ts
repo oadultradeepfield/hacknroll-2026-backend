@@ -8,7 +8,7 @@ import type {
   RebaseCommand,
 } from "@repo/shared";
 import { nanoid } from "nanoid";
-import type { CommandResult } from "../types";
+import type { CommandResult, RebasedCommitMapping } from "../types";
 import {
   findCommonAncestor,
   getCommitsBetween,
@@ -157,6 +157,8 @@ export function executeRebase(
   const ontoCommit = graph.commits[ontoCommitId];
   let depth = ontoCommit.depth;
 
+  const rebasedCommitMappings: RebasedCommitMapping[] = [];
+
   for (const commit of commitsToRebase) {
     depth++;
     const newCommitId = nanoid(8);
@@ -170,9 +172,16 @@ export function executeRebase(
     };
     graph.commits[newCommitId] = newCommit;
     parentId = newCommitId;
+
+    // Track the mapping from original position to new position
+    rebasedCommitMappings.push({
+      originalBranch: commit.branch,
+      originalDepth: commit.depth,
+      newDepth: depth,
+    });
   }
 
   graph.branches[currentBranch].tipCommitId = parentId;
 
-  return { success: true };
+  return { success: true, rebasedCommitMappings };
 }

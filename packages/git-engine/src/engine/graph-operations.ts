@@ -87,11 +87,15 @@ export function getCommitsBetween(
   ancestorId: string,
   descendantId: string,
 ): Commit[] {
+  // Get all ancestors of the ancestor (including itself) to use as stop points
+  const stopSet = getAllAncestors(graph, ancestorId);
+
   const commits: Commit[] = [];
   const visited = new Set<string>();
 
   const collectCommits = (commitId: string): void => {
-    if (commitId === ancestorId || visited.has(commitId)) return;
+    // Stop at any commit that is the ancestor or an ancestor of the ancestor
+    if (stopSet.has(commitId) || visited.has(commitId)) return;
     visited.add(commitId);
 
     const commit = graph.commits[commitId];

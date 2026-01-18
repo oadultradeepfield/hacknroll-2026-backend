@@ -5,12 +5,19 @@ import type {
   PuzzleConstraints,
 } from "@repo/shared";
 
+export interface RebasedCommitMapping {
+  originalBranch: string;
+  originalDepth: number;
+  newDepth: number;
+}
+
 export interface CommandResult {
   success: boolean;
   newGraph?: GitGraph;
   collectedFiles?: string[];
   error?: string;
   isGameComplete?: boolean;
+  rebasedCommitMappings?: RebasedCommitMapping[];
 }
 
 export interface ValidationResult {
