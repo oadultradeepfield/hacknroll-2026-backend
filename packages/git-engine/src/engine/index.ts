@@ -116,6 +116,8 @@ export class GitEngine {
       case "rebase":
         result = executeRebase(this.graph, command);
         // Update file target depths based on rebased commit mappings
+        // This is needed because rebase creates new commits with new depths,
+        // and the original commits become orphaned (not reachable from any branch)
         if (result.success && result.rebasedCommitMappings) {
           for (const mapping of result.rebasedCommitMappings) {
             for (const target of this.fileTargets) {
