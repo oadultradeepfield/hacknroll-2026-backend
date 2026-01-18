@@ -15,5 +15,8 @@
   "dependencies": {
     "@repo/shared": "workspace:*",
     "nanoid": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.9"
   }
 }

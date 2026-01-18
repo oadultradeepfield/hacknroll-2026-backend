@@ -14,9 +14,9 @@
     "outDir": "./dist",
     "lib": ["ESNext"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
     },
-    "types": ["node"]
+    "types": ["node"],
   },
-  "include": ["src"]
+  "include": ["src"],
 }
