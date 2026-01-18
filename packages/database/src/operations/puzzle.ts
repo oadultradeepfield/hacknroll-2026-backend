@@ -88,7 +88,7 @@ export async function getDailyPuzzle(): Promise<Puzzle | undefined> {
 }
 
 export async function getArchivePuzzles(
-  limit: number = 30,
+  limit: number = 100,
   offset: number = 0,
 ): Promise<Puzzle[]> {
   const db = getDb();
