@@ -37,9 +37,5 @@ export function checkWinCondition(
     return false;
   }
 
-  const hasMultipleParentCommit = Object.values(graph.commits).some(
-    (commit) => commit.parents.length > 1,
-  );
-
-  return hasMultipleParentCommit;
+  return true;
 }
