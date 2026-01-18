@@ -1,30 +1,36 @@
-import type {
-  CheckoutCommand,
-  Command,
-  FileTarget,
-  GitGraph,
-  PuzzleConstraints,
-} from "@repo/shared";
+import type { Command, FileTarget, PuzzleConstraints } from "@repo/shared";
 import { GitEngine } from "../engine";
-import { generatePossibleCommands } from "../solver/command-generator";
 import type { GeneratedPuzzle, PuzzleGeneratorConfig } from "../types";
 import { getConstraintsForDifficulty } from "./constraints";
 import { FILE_NAMES } from "./file-targets";
 import { SeededRandom } from "./seeded-random";
 
-interface CandidateTarget {
+interface VisitedState {
   branch: string;
   depth: number;
-  commitId: string;
 }
+
+const MINIMUM_BRANCHES = 5;
+const MINIMUM_FILES = 10;
+
+const BRANCH_NAMES = [
+  "feature",
+  "develop",
+  "bugfix",
+  "hotfix",
+  "release",
+  "feature-a",
+  "feature-b",
+  "feature-c",
+  "staging",
+  "experiment",
+  "feature-x",
+  "feature-y",
+];
 
 export class ConstructiveGenerator {
   private random: SeededRandom;
   private config: PuzzleGeneratorConfig;
-  private engine!: GitEngine;
-  private history: Command[] = [];
-  private candidateTargets: CandidateTarget[] = [];
-  private branchesWithCommits: Set<string> = new Set();
 
   constructor(config: PuzzleGeneratorConfig) {
     this.config = config;
@@ -32,458 +38,300 @@ export class ConstructiveGenerator {
   }
 
   generate(): GeneratedPuzzle | null {
-    // Increase attempts slightly to handle harder constraints
-    const maxAttempts = 50;
-    for (let i = 0; i < maxAttempts; i++) {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      this.random = new SeededRandom(this.config.seed + attempt);
+
       const puzzle = this.tryGenerate();
-      if (puzzle) return puzzle;
+      if (puzzle) {
+        // Final verification - run the solution and check all files collected
+        if (this.verifySolution(puzzle)) {
+          return puzzle;
+        }
+      }
     }
+
     return null;
   }
 
-  private tryGenerate(): GeneratedPuzzle | null {
-    // Reset state
-    this.history = [];
-    this.candidateTargets = [];
-    this.branchesWithCommits = new Set(["main"]);
+  private verifySolution(puzzle: GeneratedPuzzle): boolean {
+    const { fileTargets, constraints, solution } = puzzle;
 
-    const constraints = getConstraintsForDifficulty(
-      this.config.difficultyLevel,
-    );
-
-    // Initialize engine
-    this.engine = new GitEngine(
-      GitEngine.createInitialGraph(),
-      [], // No targets yet, we discover them
-      constraints,
-    );
-
-    const targetLength = this.random.nextInt(
-      this.config.minPar,
-      this.config.maxPar,
-    );
-
-    // Allow some buffer for cleanup
-    const maxSteps = Math.ceil(targetLength * 1.5) + 10;
-
-    while (this.history.length < maxSteps) {
-      // If we are over target length, strictly try to finish
-      const forcedFinish = this.history.length >= targetLength;
-
-      if (forcedFinish && this.isStateClean()) {
-        break;
-      }
-
-      const command = this.chooseNextCommand(constraints, forcedFinish);
-
-      if (!command) {
-        break;
-      }
-
-      const result = this.engine.executeCommand(command);
-
-      if (result.success) {
-        this.history.push(command);
-        this.trackState(command);
-      }
-    }
-
-    if (!this.satisfiesRequirements()) {
-      return null;
-    }
-
-    // Filter candidates to ensure they are reachable from main
-    const finalGraph = this.engine.getGraph();
-    const mainTip = finalGraph.branches.main?.tipCommitId;
-    if (!mainTip) return null;
-
-    const mainAncestors = this.getAncestors(finalGraph, mainTip);
-
-    // CRITICAL FIX: Only include candidates that are:
-    // 1. Reachable from main (merged/rebased into main)
-    // 2. NOT on the main branch itself (forces player to create feature branches)
-    const validCandidates = this.candidateTargets.filter(
-      (c) => mainAncestors.has(c.commitId) && c.branch !== "main",
-    );
-
-    // Ensure enough unique candidates
-    const uniqueCandidates = this.deduplicateCandidates(validCandidates);
-
-    // Relaxed constraint: Ensure at least one file target is available.
-    // We try to meet minFiles, but if the topology restricts us, we accept what we found
-    // rather than failing completely.
-    if (uniqueCandidates.length === 0) {
-      return null;
-    }
-
-    // Calculate minimum required branches based on difficulty
-    const minRequiredBranches = this.getMinRequiredBranches();
-
-    // Check if we have enough unique branches in candidates
-    const uniqueBranches = new Set(uniqueCandidates.map((c) => c.branch));
-    if (uniqueBranches.size < minRequiredBranches) {
-      return null;
-    }
-
-    // Sample files ensuring branch diversity based on difficulty
-    const fileTargets = this.sampleFilesWithBranchDiversity(
-      uniqueCandidates,
-      minRequiredBranches,
-    );
-
-    // Verify we actually got enough branch diversity
-    const targetBranches = new Set(fileTargets.map((t) => t.branch));
-    if (targetBranches.size < minRequiredBranches) {
-      return null;
-    }
-
-    const puzzle: GeneratedPuzzle = {
-      fileTargets,
-      constraints,
-      solution: this.history,
-      parScore: this.history.length,
-    };
-
-    // We skip strict post-generation validation (par score exact range, required types)
-    // to ensure robustness. The constructive generator's heuristics already bias heavily
-    // towards meeting these constraints, and a slightly "off" puzzle is better than
-    // failing to generate one entirely.
-
-    return puzzle;
-  }
-
-  /**
-   * Returns the minimum number of different branches that must have file targets
-   * based on the difficulty level
-   */
-  private getMinRequiredBranches(): number {
-    const difficulty = this.config.difficultyLevel;
-
-    // Difficulty 1-2: At least 1 non-main branch
-    // Difficulty 3-4: At least 2 non-main branches
-    // Difficulty 5-7: At least 2 non-main branches (could increase to 3 if needed)
-    if (difficulty <= 2) {
-      return 1;
-    } else if (difficulty <= 4) {
-      return 2;
-    } else {
-      return 2; // Could be 3 for very hard puzzles
-    }
-  }
-
-  private chooseNextCommand(
-    constraints: PuzzleConstraints,
-    forcedFinish: boolean,
-  ): Command | null {
-    const graph = this.engine.getGraph();
-    const counts = this.engine.getCommandCounts();
-    const possible = generatePossibleCommands(graph, constraints, counts);
-
-    const filtered = possible.filter((cmd) => {
-      // 1. Never undo
-      if (cmd.type === "undo") return false;
-
-      // 2. Strict finishing rules
-      if (forcedFinish) {
-        // Only allow moves that get us closer to main or merge into main
-        if (cmd.type === "commit") return false;
-        if (cmd.type === "branch") return false;
-      }
-
-      // 3. Prevent immediate backtracking
-      const lastCmd = this.history[this.history.length - 1];
-      if (lastCmd && lastCmd.type === "checkout" && cmd.type === "checkout") {
-        return false;
-      }
-
-      return true;
-    });
-
-    if (filtered.length === 0) return null;
-
-    return this.weightedPick(filtered, counts, forcedFinish);
-  }
-
-  private weightedPick(
-    commands: Command[],
-    counts: Record<string, number>,
-    forcedFinish: boolean,
-  ): Command {
-    const graph = this.engine.getGraph();
-    const currentBranch =
-      graph.head.type === "attached" ? graph.head.ref : null;
-
-    // Count how many non-main branches have commits
-    const nonMainBranchesWithCommits = Array.from(
-      this.branchesWithCommits,
-    ).filter((b) => b !== "main").length;
-    const minRequiredBranches = this.getMinRequiredBranches();
-    const needMoreBranches = nonMainBranchesWithCommits < minRequiredBranches;
-
-    const weights = commands.map((cmd) => {
-      let weight = 10;
-
-      // Base weights
-      switch (cmd.type) {
-        case "commit":
-          weight = forcedFinish ? 0 : 40;
-          // Discourage continuous commits on same branch if we need diversity
-          if (
-            this.history.length > 0 &&
-            this.history[this.history.length - 1].type === "commit"
-          ) {
-            weight -= 10;
-          }
-          // Strongly discourage committing on main if we need branch diversity
-          // This ensures file targets end up on feature branches
-          if (currentBranch === "main" && needMoreBranches) {
-            weight = 5; // Very low weight to discourage but not completely prevent
-          }
-          // Encourage commits on non-main branches
-          if (currentBranch && currentBranch !== "main") {
-            weight += 20;
-          }
-          break;
-        case "branch":
-          weight = forcedFinish ? 0 : counts.branch < 2 ? 50 : 15;
-          // Boost branch creation if we need more branches with file targets
-          if (needMoreBranches && counts.branch < minRequiredBranches + 1) {
-            weight += 60;
-          }
-          break;
-        case "checkout":
-          weight = 20;
-          if (forcedFinish && (cmd as CheckoutCommand).target === "main") {
-            weight = 1000; // Strong pull to main when forcing finish
-          }
-          // Encourage switching to branches that have activity or need it
-          if (
-            !forcedFinish &&
-            cmd.type === "checkout" &&
-            (cmd as CheckoutCommand).target !== "main"
-          ) {
-            weight += 10;
-            // Extra boost if we need more branches with commits
-            if (needMoreBranches) {
-              weight += 30;
-            }
-          }
-          // Discourage checking out main early if we need branch diversity
-          if (
-            !forcedFinish &&
-            (cmd as CheckoutCommand).target === "main" &&
-            needMoreBranches
-          ) {
-            weight = 5;
-          }
-          break;
-        case "merge":
-          weight = forcedFinish ? 100 : 25;
-          // Prefer merging into main
-          if (currentBranch === "main") {
-            weight += 20;
-          }
-          break;
-        case "rebase":
-          weight = forcedFinish ? 80 : 20;
-          break;
-      }
-
-      // Boost required commands if missing
-      const isMergeOrRebase = cmd.type === "merge" || cmd.type === "rebase";
-      if (
-        isMergeOrRebase &&
-        this.config.requiredCommandTypes.includes(
-          cmd.type as "merge" | "rebase",
-        )
-      ) {
-        const hasType = this.history.some((h) => h.type === cmd.type);
-        if (!hasType) {
-          // If we haven't satisfied the requirement yet, boost significantly
-          // BUT only if it makes sense (e.g. don't merge/rebase if we just branched)
-          weight += 100;
-        }
-      }
-
-      // Contextual Heuristics
-
-      // If we are just starting, prioritize branching and committing
-      if (this.history.length < 3) {
-        if (cmd.type === "branch") weight += 50;
-        if (cmd.type === "commit") weight += 30;
-        if (cmd.type === "merge" || cmd.type === "rebase") weight = 0;
-      }
-
-      // If on main and have other active branches, encourage checking them out or merging them
-      if (currentBranch === "main" && !forcedFinish) {
-        if (cmd.type === "checkout") weight += 20;
-      }
-
-      return Math.max(0, weight);
-    });
-
-    const totalWeight = weights.reduce((a, b) => a + b, 0);
-    if (totalWeight === 0) return commands[0]; // Fallback
-
-    let r = this.random.next() * totalWeight;
-
-    for (let i = 0; i < commands.length; i++) {
-      r -= weights[i];
-      if (r <= 0) return commands[i];
-    }
-
-    return commands[commands.length - 1];
-  }
-
-  private trackState(cmd: Command) {
-    const graph = this.engine.getGraph();
-
-    // Track candidates for file placement
-    if (cmd.type === "commit") {
-      if (graph.head.type === "attached") {
-        const branch = graph.head.ref;
-        const tip = graph.branches[branch].tipCommitId;
-        const depth = graph.commits[tip].depth;
-
-        this.branchesWithCommits.add(branch);
-
-        // Don't place targets on initial commit
-        // Also track all commits including main for now, filtering happens later
-        if (depth > 0) {
-          this.candidateTargets.push({
-            branch,
-            depth,
-            commitId: tip,
-          });
-        }
-      }
-    }
-
-    // Update branches with commits if we merged something
-    if (cmd.type === "merge" || cmd.type === "rebase") {
-      if (graph.head.type === "attached") {
-        this.branchesWithCommits.add(graph.head.ref);
-      }
-    }
-  }
-
-  private isStateClean(): boolean {
-    // Clean means HEAD is attached to main
-    const graph = this.engine.getGraph();
-    return graph.head.type === "attached" && graph.head.ref === "main";
-  }
-
-  private satisfiesRequirements(): boolean {
-    // Check required commands
-    for (const req of this.config.requiredCommandTypes) {
-      if (!this.history.some((c) => c.type === req)) return false;
-    }
-
-    // Check if back on main
-    if (!this.isStateClean()) return false;
-
-    // Check if we have enough non-main branches with commits
-    const nonMainBranchesWithCommits = Array.from(
-      this.branchesWithCommits,
-    ).filter((b) => b !== "main").length;
-    if (nonMainBranchesWithCommits < this.getMinRequiredBranches()) {
+    // Must have minimum files and branches
+    if (fileTargets.length < MINIMUM_FILES) {
       return false;
     }
 
-    return true;
-  }
+    const branches = new Set(fileTargets.map((f) => f.branch));
+    if (branches.size < MINIMUM_BRANCHES) {
+      return false;
+    }
 
-  private getAncestors(graph: GitGraph, commitId: string): Set<string> {
-    const ancestors = new Set<string>();
-    const queue = [commitId];
-    while (queue.length > 0) {
-      // biome-ignore lint/style/noNonNullAssertion: queue is guaranteed to have elements due to while condition
-      const curr = queue.shift()!;
-      if (ancestors.has(curr)) continue;
-      ancestors.add(curr);
-      const commit = graph.commits[curr];
-      if (commit) {
-        queue.push(...commit.parents);
+    // No files on main
+    if (fileTargets.some((f) => f.branch === "main")) {
+      return false;
+    }
+
+    // All depths must be positive
+    if (fileTargets.some((f) => f.depth <= 0)) {
+      return false;
+    }
+
+    // Run the solution and verify all files are collected
+    const engine = new GitEngine(
+      GitEngine.createInitialGraph(),
+      JSON.parse(JSON.stringify(fileTargets)),
+      constraints,
+    );
+
+    for (const cmd of solution) {
+      const result = engine.executeCommand(cmd);
+      if (!result.success) {
+        return false;
       }
     }
-    return ancestors;
+
+    const collected = engine.getCollectedFiles();
+    return collected.length === fileTargets.length;
   }
 
-  private deduplicateCandidates(
-    candidates: CandidateTarget[],
-  ): CandidateTarget[] {
-    const uniqueMap = new Map<string, CandidateTarget>();
-    for (const c of candidates) {
-      uniqueMap.set(`${c.branch}:${c.depth}`, c);
+  private tryGenerate(): GeneratedPuzzle | null {
+    const constraints = this.buildConstraints();
+
+    // Step 1: Build the solution step by step, tracking states
+    const result = this.buildSolutionWithStates(constraints);
+    if (!result) {
+      return null;
     }
-    return Array.from(uniqueMap.values());
+
+    const { solution, visitedStates } = result;
+
+    // Step 2: Filter to valid file placement states
+    const validStates = this.filterValidStates(visitedStates);
+    if (validStates.length < MINIMUM_FILES) {
+      return null;
+    }
+
+    // Step 3: Check branch diversity
+    const branchSet = new Set(validStates.map((s) => s.branch));
+    if (branchSet.size < MINIMUM_BRANCHES) {
+      return null;
+    }
+
+    // Step 4: Select file targets
+    const fileTargets = this.selectFileTargets(validStates, branchSet);
+    if (!fileTargets || fileTargets.length < MINIMUM_FILES) {
+      return null;
+    }
+
+    return {
+      fileTargets,
+      constraints,
+      solution,
+      parScore: solution.length,
+    };
+  }
+
+  private buildConstraints(): PuzzleConstraints {
+    const base = getConstraintsForDifficulty(this.config.difficultyLevel);
+
+    return {
+      ...base,
+      allowedBranches: ["main", ...BRANCH_NAMES],
+    };
   }
 
   /**
-   * Sample files ensuring minimum branch diversity based on difficulty
+   * Build solution by actually executing commands and tracking state after each.
+   * This ensures solution is valid and we know exactly what states are visited.
    */
-  private sampleFilesWithBranchDiversity(
-    candidates: CandidateTarget[],
-    minBranches: number,
-  ): FileTarget[] {
-    const count = Math.min(
-      candidates.length,
-      this.random.nextInt(this.config.minFiles, this.config.maxFiles),
+  private buildSolutionWithStates(
+    constraints: PuzzleConstraints,
+  ): { solution: Command[]; visitedStates: VisitedState[] } | null {
+    const engine = new GitEngine(
+      GitEngine.createInitialGraph(),
+      [],
+      constraints,
     );
 
-    const fileNames = this.random.shuffle([...FILE_NAMES]);
+    const solution: Command[] = [];
+    const visitedStates: VisitedState[] = [];
+    const seenStateKeys = new Set<string>();
 
-    // Group candidates by branch
-    const candidatesByBranch = new Map<string, CandidateTarget[]>();
-    for (const c of candidates) {
-      const existing = candidatesByBranch.get(c.branch) || [];
-      existing.push(c);
-      candidatesByBranch.set(c.branch, existing);
-    }
+    const recordState = () => {
+      const graph = engine.getGraph();
+      if (graph.head.type !== "attached") return;
 
-    const branches = Array.from(candidatesByBranch.keys());
-    const selectedCandidates: CandidateTarget[] = [];
+      const branchName = graph.head.ref;
+      const branch = graph.branches[branchName];
+      if (!branch) return;
 
-    // First, ensure we have at least one candidate from each required branch
-    const shuffledBranches = this.random.shuffle([...branches]);
-    const branchesUsed = new Set<string>();
+      const commit = graph.commits[branch.tipCommitId];
+      if (!commit) return;
 
-    for (const branch of shuffledBranches) {
-      if (branchesUsed.size >= minBranches) break;
-      if (selectedCandidates.length >= count) break;
+      const key = `${branchName}:${commit.depth}`;
+      if (!seenStateKeys.has(key)) {
+        seenStateKeys.add(key);
+        visitedStates.push({ branch: branchName, depth: commit.depth });
+      }
+    };
 
-      const branchCandidates = candidatesByBranch.get(branch) || [];
-      if (branchCandidates.length > 0) {
-        const shuffledBranchCandidates = this.random.shuffle([
-          ...branchCandidates,
-        ]);
-        selectedCandidates.push(shuffledBranchCandidates[0]);
-        branchesUsed.add(branch);
+    const execute = (cmd: Command): boolean => {
+      const result = engine.executeCommand(cmd);
+      if (result.success) {
+        solution.push(cmd);
+        recordState();
+        return true;
+      }
+      return false;
+    };
+
+    // Select branches for this puzzle
+    const branchCount = Math.max(
+      MINIMUM_BRANCHES,
+      this.config.difficultyLevel + 3,
+    );
+    const shuffledBranches = this.random.shuffle([...BRANCH_NAMES]);
+    const selectedBranches = shuffledBranches.slice(0, branchCount);
+
+    // Calculate commits per branch to ensure enough file slots
+    const minCommitsPerBranch = Math.max(
+      2,
+      Math.ceil(MINIMUM_FILES / branchCount) + 1,
+    );
+
+    // Build each branch
+    for (const branchName of selectedBranches) {
+      // 1. Create branch (from main)
+      if (!execute({ type: "branch", name: branchName })) {
+        return null;
+      }
+
+      // 2. Checkout the branch - CRITICAL: must checkout before committing
+      if (!execute({ type: "checkout", target: branchName })) {
+        return null;
+      }
+
+      // 3. Make commits on this branch
+      const numCommits = minCommitsPerBranch + this.random.nextInt(0, 2);
+      for (let i = 0; i < numCommits; i++) {
+        if (!execute({ type: "commit", message: `${branchName}-${i + 1}` })) {
+          return null;
+        }
+      }
+
+      // 4. Return to main
+      if (!execute({ type: "checkout", target: "main" })) {
+        return null;
+      }
+
+      // 5. Merge branch into main
+      if (!execute({ type: "merge", branch: branchName })) {
+        return null;
       }
     }
 
-    // Fill remaining slots with random candidates
-    const remainingCandidates = candidates.filter(
-      (c) =>
-        !selectedCandidates.some(
-          (s) => s.branch === c.branch && s.depth === c.depth,
-        ),
-    );
-    const shuffledRemaining = this.random.shuffle(remainingCandidates);
+    // Add rebase if required
+    if (this.config.requiredCommandTypes.includes("rebase")) {
+      const rebaseBranch = `rebase-branch`;
 
-    for (const candidate of shuffledRemaining) {
-      if (selectedCandidates.length >= count) break;
-      selectedCandidates.push(candidate);
+      if (!execute({ type: "branch", name: rebaseBranch })) {
+        return null;
+      }
+      if (!execute({ type: "checkout", target: rebaseBranch })) {
+        return null;
+      }
+      if (!execute({ type: "commit", message: "rebase-1" })) {
+        return null;
+      }
+      if (!execute({ type: "commit", message: "rebase-2" })) {
+        return null;
+      }
+      if (!execute({ type: "rebase", onto: "main" })) {
+        return null;
+      }
+      if (!execute({ type: "checkout", target: "main" })) {
+        return null;
+      }
+      if (!execute({ type: "merge", branch: rebaseBranch })) {
+        return null;
+      }
     }
 
-    // Shuffle final selection and map to FileTarget
-    const finalSelection = this.random.shuffle(selectedCandidates);
+    return { solution, visitedStates };
+  }
 
-    return finalSelection.map((c, i) => ({
-      branch: c.branch,
-      depth: c.depth,
-      fileName: fileNames[i % fileNames.length],
-      collected: false,
-    }));
+  private filterValidStates(states: VisitedState[]): VisitedState[] {
+    return states.filter((s) => s.branch !== "main" && s.depth > 0);
+  }
+
+  private selectFileTargets(
+    states: VisitedState[],
+    branchSet: Set<string>,
+  ): FileTarget[] | null {
+    const fileNames = this.random.shuffle([...FILE_NAMES]);
+    let nameIdx = 0;
+
+    const targets: FileTarget[] = [];
+    const usedKeys = new Set<string>();
+
+    // Group by branch
+    const byBranch = new Map<string, VisitedState[]>();
+    for (const state of states) {
+      if (state.branch === "main") continue;
+      const list = byBranch.get(state.branch) || [];
+      list.push(state);
+      byBranch.set(state.branch, list);
+    }
+
+    // Ensure each branch gets at least 2 files
+    for (const branch of branchSet) {
+      if (branch === "main") continue;
+
+      const branchStates = byBranch.get(branch) || [];
+      if (branchStates.length === 0) continue;
+
+      const shuffled = this.random.shuffle([...branchStates]);
+      const count = Math.min(2, shuffled.length);
+
+      for (let i = 0; i < count; i++) {
+        const state = shuffled[i];
+        const key = `${state.branch}:${state.depth}`;
+
+        if (usedKeys.has(key)) continue;
+        if (nameIdx >= fileNames.length) return null;
+
+        usedKeys.add(key);
+        targets.push({
+          branch: state.branch,
+          depth: state.depth,
+          fileName: fileNames[nameIdx++],
+          collected: false,
+        });
+      }
+    }
+
+    // Fill up to minimum
+    const remaining = states.filter(
+      (s) => s.branch !== "main" && !usedKeys.has(`${s.branch}:${s.depth}`),
+    );
+    const shuffledRemaining = this.random.shuffle([...remaining]);
+
+    for (const state of shuffledRemaining) {
+      if (targets.length >= MINIMUM_FILES) break;
+      if (nameIdx >= fileNames.length) return null;
+
+      const key = `${state.branch}:${state.depth}`;
+      if (usedKeys.has(key)) continue;
+
+      usedKeys.add(key);
+      targets.push({
+        branch: state.branch,
+        depth: state.depth,
+        fileName: fileNames[nameIdx++],
+        collected: false,
+      });
+    }
+
+    return targets.length >= MINIMUM_FILES ? targets : null;
   }
 }

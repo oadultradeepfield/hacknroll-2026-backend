@@ -20,13 +20,13 @@ export const DEFAULT_CONSTRAINTS: Record<
   number,
   { maxCommits: number; maxCheckouts: number; maxBranches: number }
 > = {
-  1: { maxCommits: 10, maxCheckouts: 5, maxBranches: 2 },
-  2: { maxCommits: 12, maxCheckouts: 6, maxBranches: 3 },
-  3: { maxCommits: 15, maxCheckouts: 8, maxBranches: 3 },
-  4: { maxCommits: 18, maxCheckouts: 10, maxBranches: 4 },
-  5: { maxCommits: 20, maxCheckouts: 12, maxBranches: 4 },
-  6: { maxCommits: 25, maxCheckouts: 15, maxBranches: 5 },
-  7: { maxCommits: 30, maxCheckouts: 18, maxBranches: 5 },
+  1: { maxCommits: 10, maxCheckouts: 8, maxBranches: 2 },
+  2: { maxCommits: 15, maxCheckouts: 10, maxBranches: 3 },
+  3: { maxCommits: 18, maxCheckouts: 12, maxBranches: 3 },
+  4: { maxCommits: 22, maxCheckouts: 15, maxBranches: 4 },
+  5: { maxCommits: 26, maxCheckouts: 18, maxBranches: 4 },
+  6: { maxCommits: 32, maxCheckouts: 22, maxBranches: 5 },
+  7: { maxCommits: 40, maxCheckouts: 28, maxBranches: 5 },
 };
 
 export const ALLOWED_BRANCHES = [
@@ -34,6 +34,7 @@ export const ALLOWED_BRANCHES = [
   "feature-a",
   "feature-b",
   "feature-c",
+  "feature-d",
   "hotfix",
   "develop",
 ];

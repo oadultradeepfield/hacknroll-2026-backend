@@ -26,10 +26,10 @@ function buildDailyPuzzleConfig(
   return {
     seed: date,
     difficultyLevel: difficulty,
-    minFiles: Math.min(2 + Math.floor(difficulty / 2), 5),
-    maxFiles: Math.min(3 + difficulty, 8),
-    minPar: 3 + difficulty,
-    maxPar: 8 + difficulty * 2,
+    minFiles: Math.min(6 + Math.floor(difficulty / 2), 12),
+    maxFiles: Math.min(10 + difficulty, 20),
+    minPar: 6 + difficulty,
+    maxPar: 12 + difficulty * 2,
     requiredCommandTypes: difficulty >= 4 ? ["merge", "rebase"] : ["merge"],
   };
 }
@@ -41,10 +41,10 @@ function buildArchivePuzzleConfig(
   return {
     seed,
     difficultyLevel: difficulty,
-    minFiles: Math.min(2 + Math.floor(difficulty / 2), 5),
-    maxFiles: Math.min(3 + difficulty, 8),
-    minPar: 3 + difficulty,
-    maxPar: 8 + difficulty * 2,
+    minFiles: Math.min(6 + Math.floor(difficulty / 2), 12),
+    maxFiles: Math.min(10 + difficulty, 20),
+    minPar: 6 + difficulty,
+    maxPar: 12 + difficulty * 2,
     requiredCommandTypes: difficulty >= 4 ? ["merge", "rebase"] : ["merge"],
   };
 }

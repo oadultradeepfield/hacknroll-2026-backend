@@ -39,7 +39,7 @@ export class MonthSeedLock {
   private async performSeeding(): Promise<void> {
     try {
       const today = new Date();
-      for (let i = 0; i < 60; i++) {
+      for (let i = 0; i < 30; i++) {
         const date = new Date(today);
         date.setDate(date.getDate() - i);
         const dateString = date.toISOString().split("T")[0];

@@ -59,15 +59,18 @@ export function getMinDepthForDifficulty(difficultyLevel: number): number {
 export function getMinRequiredBranchesForDifficulty(
   difficultyLevel: number,
 ): number {
-  // Difficulty 1-2: At least 1 non-main branch
-  // Difficulty 3-4: At least 2 non-main branches
-  // Difficulty 5-7: At least 2 non-main branches (keeps puzzles solvable)
-  if (difficultyLevel <= 2) {
+  // Difficulty 1: At least 1 non-main branch
+  // Difficulty 2-3: At least 2 non-main branches
+  // Difficulty 4-5: At least 3 non-main branches
+  // Difficulty 6-7: At least 4 non-main branches
+  if (difficultyLevel <= 1) {
     return 1;
+  } else if (difficultyLevel <= 2) {
+    return 2;
   } else if (difficultyLevel <= 4) {
-    return 2;
+    return 3;
   } else {
-    return 2;
+    return 4;
   }
 }
 
@@ -108,6 +111,7 @@ export function getDifficultyConfig(difficultyLevel: number): {
   maxPar: number;
   requiresRebase: boolean;
   minFilesPerBranch: number;
+  minCommitsPerBranch: number;
 } {
   return {
     minDepth: getMinDepthForDifficulty(difficultyLevel),
@@ -117,5 +121,6 @@ export function getDifficultyConfig(difficultyLevel: number): {
     maxPar: getMaxParForDifficulty(difficultyLevel),
     requiresRebase: difficultyLevel >= 4,
     minFilesPerBranch: difficultyLevel >= 5 ? 2 : 1,
+    minCommitsPerBranch: difficultyLevel >= 4 ? 2 : 1,
   };
 }
