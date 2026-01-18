@@ -7,7 +7,7 @@ export async function getArchivePuzzlesHandler(
   }>,
 ) {
   try {
-    const limit = parseInt(c.req.query("limit") || "30", 10);
+    const limit = parseInt(c.req.query("limit") || "100", 10);
     const offset = parseInt(c.req.query("offset") || "0", 10);
 
     const puzzles = await getArchivePuzzles(limit, offset);
