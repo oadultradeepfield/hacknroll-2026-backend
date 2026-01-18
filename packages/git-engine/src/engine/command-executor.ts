@@ -89,6 +89,10 @@ export function executeMerge(
   graph: GitGraph,
   command: MergeCommand,
 ): CommandResult {
+  if (graph.head.type !== "attached") {
+    return { success: false, error: "Cannot merge in detached HEAD state" };
+  }
+
   const currentBranch = graph.head.ref;
   const currentCommitId = graph.branches[currentBranch].tipCommitId;
   const targetCommitId = graph.branches[command.branch].tipCommitId;

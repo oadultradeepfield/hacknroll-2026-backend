@@ -9,11 +9,14 @@ export function checkFileCollection(
   const currentCommitId = getCurrentCommitId(graph);
   const currentCommit = graph.commits[currentCommitId];
 
+  const currentBranch =
+    graph.head.type === "attached" ? graph.head.ref : currentCommit.branch;
+
   for (const target of fileTargets) {
     if (collectedFiles.has(target.fileName)) continue;
 
     if (
-      currentCommit.branch === target.branch &&
+      currentBranch === target.branch &&
       currentCommit.depth === target.depth
     ) {
       collectedFiles.add(target.fileName);

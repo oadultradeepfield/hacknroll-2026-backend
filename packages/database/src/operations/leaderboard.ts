@@ -1,9 +1,9 @@
 import type { LeaderboardEntry } from "@repo/shared";
 import { LEADERBOARD_SIZE } from "@repo/shared";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getDb } from "@/db-client";
-import { games, leaderboard, users } from "@/drizzle-out/schema";
+import { leaderboard, userStats, users } from "@/drizzle-out/schema";
 
 export async function createLeaderboardEntries(
   entries: LeaderboardEntry[],
@@ -68,38 +68,26 @@ export async function getUserRank(
 
 export async function generateDailyLeaderboard(date: number): Promise<void> {
   const db = getDb();
-  // Get aggregated scores for the date, joining with users table to get username
   const scores = await db
     .select({
-      userId: games.userId,
+      userId: userStats.userId,
       username: users.username,
-      totalScore: sql<number>`SUM(${games.score})`.as("total_score"),
-      gamesPlayed: sql<number>`COUNT(*)`.as("games_played"),
+      totalScore: userStats.bestScore,
+      gamesPlayed: userStats.totalGamesPlayed,
     })
-    .from(games)
-    .innerJoin(users, eq(games.userId, users.id))
-    .where(
-      and(
-        eq(games.status, "completed"),
-        sql`date(${games.completedAt}, 'unixepoch') = date(${date}, 'unixepoch')`,
-      ),
-    )
-    .groupBy(games.userId)
-    .orderBy(desc(sql`SUM(${games.score})`));
+    .from(userStats)
+    .innerJoin(users, eq(userStats.userId, users.id))
+    .where(isNotNull(users.username))
+    .orderBy(desc(userStats.bestScore));
 
-  // Filter users who want to appear on leaderboard (have username)
-  const eligibleScores = scores.filter((s) => s.username !== null);
-
-  // Create leaderboard entries
-  const entries: LeaderboardEntry[] = eligibleScores.map((score, index) => ({
+  const entries: LeaderboardEntry[] = scores.map((score, index) => ({
     rank: index + 1,
     userId: score.userId,
     username: score.username ?? "",
-    score: score.totalScore,
+    score: score.totalScore ?? 0,
     gamesPlayed: score.gamesPlayed,
   }));
 
-  // Clear existing entries for the date and insert new ones
   await db.delete(leaderboard).where(eq(leaderboard.leaderboardDate, date));
 
   if (entries.length > 0) {

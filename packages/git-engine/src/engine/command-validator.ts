@@ -17,6 +17,9 @@ export function validateCommand(
       if (commandCounts.checkout >= constraints.maxCheckouts) {
         return { valid: false, error: "Maximum checkouts reached" };
       }
+      if (!graph.branches[command.target] && !graph.commits[command.target]) {
+        return { valid: false, error: `Target "${command.target}" not found` };
+      }
       break;
     case "branch":
       if (!constraints.allowedBranches.includes(command.name)) {
@@ -42,6 +45,9 @@ export function validateCommand(
       if (graph.head.type === "detached") {
         return { valid: false, error: "Cannot merge in detached HEAD state" };
       }
+      if (graph.head.ref === command.branch) {
+        return { valid: false, error: "Cannot merge a branch into itself" };
+      }
       break;
     case "rebase":
       if (!graph.branches[command.onto]) {
@@ -51,10 +57,10 @@ export function validateCommand(
         };
       }
       if (graph.head.type === "detached") {
-        return {
-          valid: false,
-          error: "Cannot rebase in detached HEAD state",
-        };
+        return { valid: false, error: "Cannot rebase in detached HEAD state" };
+      }
+      if (graph.head.ref === command.onto) {
+        return { valid: false, error: "Cannot rebase a branch onto itself" };
       }
       break;
   }

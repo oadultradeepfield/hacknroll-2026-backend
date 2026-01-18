@@ -30,8 +30,8 @@ export class GitEngine {
     constraints: PuzzleConstraints,
   ) {
     this.graph = cloneGraph(initialGraph);
-    this.fileTargets = fileTargets;
-    this.constraints = constraints;
+    this.fileTargets = JSON.parse(JSON.stringify(fileTargets));
+    this.constraints = JSON.parse(JSON.stringify(constraints));
     this.collectedFiles = new Set();
     this.commandCounts = {
       commit: 0,
@@ -40,6 +40,7 @@ export class GitEngine {
       merge: 0,
       rebase: 0,
     };
+    checkFileCollection(this.graph, this.fileTargets, this.collectedFiles);
   }
 
   static createInitialGraph(): GitGraph {
