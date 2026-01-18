@@ -12,7 +12,6 @@ export async function handleScheduled(event: ScheduledEvent): Promise<void> {
       await generateLeaderboardSnapshotTask();
       break;
     default:
-      await generateLeaderboardSnapshotTask();
       console.log(`No scheduled task for hour ${hour}`);
   }
 }

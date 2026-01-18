@@ -22,7 +22,7 @@ export default class DataService extends WorkerEntrypoint<Cloudflare.Env> {
     ctx.waitUntil(
       (async () => {
         try {
-          const id = env.MONTH_SEED_LOCK.idFromName("global-seeder-lock-v2");
+          const id = env.MONTH_SEED_LOCK.idFromName("global-seeder-lock-v3");
           const stub = env.MONTH_SEED_LOCK.get(id);
           const response = await stub.fetch("http://internal/seed");
 

@@ -180,20 +180,50 @@ function calculateHeuristic(
     notOnMainPenalty = 1;
   }
 
-  // 3. Required operations
-  // If we haven't done a merge or rebase yet, we need at least 1 command to do so.
-  const hasMergeOrRebase = state.commands.some(
-    (c) => c.type === "merge" || c.type === "rebase",
+  // 3. Required operations - merge or rebase
+  // Check if the graph already has a merge commit or if rebase was used
+  const hasMergeCommit = Object.values(state.graph.commits).some(
+    (commit) => commit.parents.length > 1,
   );
+  const hasRebase = state.commands.some((c) => c.type === "rebase");
+  const hasMergeOrRebase = hasMergeCommit || hasRebase;
+
+  // If we haven't done a merge or rebase yet, we need at least:
+  // - 1 command to create a branch (if not exists)
+  // - 1 command to checkout that branch
+  // - 1 command to commit (create content to merge)
+  // - 1 command to checkout main
+  // - 1 command to merge/rebase
+  // But we're being conservative here - just count 1 for the merge/rebase itself
   const requirementPenalty = hasMergeOrRebase ? 0 : 1;
 
-  // Combining penalties:
-  // If we have files to collect, we are definitely not done.
-  // If we have collected all files, we still need to be on main.
-  // We can sum these up as a loose lower bound.
-  // Note: If uncollected > 0, we might be on main or not, but we have to leave main (presumably) or move around.
-  // For safety, simpler heuristic is often better.
-  return uncollectedCount + notOnMainPenalty + requirementPenalty;
+  // 4. Branch creation penalty
+  // If file targets require branches that don't exist yet, we need to create them
+  const existingBranches = new Set(Object.keys(state.graph.branches));
+  const requiredBranches = new Set(
+    fileTargets
+      .filter((t) => !state.collectedFiles.has(t.fileName))
+      .map((t) => t.branch),
+  );
+  let branchCreationPenalty = 0;
+  for (const branch of requiredBranches) {
+    if (!existingBranches.has(branch)) {
+      // Need at least: branch + checkout + commit = 3 commands minimum
+      branchCreationPenalty += 3;
+    }
+  }
+
+  // 5. If we need to merge content from other branches into main
+  // and we're not on main, we'll eventually need to get back to main
+  // and perform the merge. This is already partially captured by notOnMainPenalty.
+
+  // Combining penalties (must remain admissible - never overestimate)
+  return (
+    uncollectedCount +
+    notOnMainPenalty +
+    requirementPenalty +
+    branchCreationPenalty
+  );
 }
 
 function createEngineFromState(

@@ -1,6 +1,6 @@
 import type { LeaderboardEntry } from "@repo/shared";
 import { LEADERBOARD_SIZE } from "@repo/shared";
-import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getDb } from "@/db-client";
 import { leaderboard, userStats, users } from "@/drizzle-out/schema";
